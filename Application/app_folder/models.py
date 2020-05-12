@@ -17,12 +17,6 @@ class User(UserMixin, db.Model):
     
     def set_password(self, password):
         self.password_hash = generate_password_hash(password, method='sha256')
-    
-    '''
-    appointments = db.relationship('Appointments', backref='author', lazy='dynamic')
-    def __repr__(self):
-        return '<User: {}>'.format(self.username)
-    '''
 
 @login_manager.user_loader
 def load_user(user_id):

@@ -12,6 +12,8 @@ def hello():
     """
         Displays the general home page, "Home.html"
     """
+    if current_user.is_authenticated:
+        return redirect('/Home-Login')
     return render_template('Home.html')
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -21,6 +23,8 @@ def login():
         
         Check cross checks credential with database when user enter a username and password.
     """
+    if current_user.is_authenticated:
+        return redirect('/Home-Login')
     form = LoginForm()
 
     if form.validate_on_submit():
@@ -34,16 +38,17 @@ def login():
             else:
                 return '<h1> Invalid login! </h1>'
         else:
-            return '<h1> Invalid login! </h1>' 
+            return '<h1> User does not exist! </h1>' 
     return render_template('login.html', form=form)
 
 @app.route('/create_account', methods=['GET', 'POST'])
 def reg():
     """
         Displays the account creation page, "CreateAccount.html"
-
         When a new user enters their data the data is saved and pushed to the database.
     """
+    if current_user.is_authenticated:
+        return redirect('/Home-Login')
     form = RegistrationForm()
 
     if form.validate_on_submit():
@@ -71,17 +76,32 @@ def Home():
     records = c.fetchall()
     
     # Determine if the user exists in database by checking the each row's column in the 1th index
-    name = time_range = meeting_length = None
+    time_range = meeting_length = None
     for row in records:
         if row[1] == current_user.username:
             name = row[1]
             time_range = row[2]
             meeting_length = row[3]
     
+    # Check for appointments made with creator
+    select_query = """SELECT * from appointments"""
+    c.execute(select_query)
+    appts = c.fetchall()
+
+    # List of appointments for the creator
+    students = []
+    for row in appts:
+        if row[1] == current_user.username:
+            info = []
+            info.append(row[2]) # Name
+            info.append(row[3]) # Email
+            info.append(row[4]) # Time
+            students.append(info)
+    
     # Close the cursor
     c.close()
 
-    return render_template('Home-Login.html', name = name, time_Range = time_range, meeting_Length = meeting_length)
+    return render_template('Home-Login.html', name = current_user.username, time_Range = time_range, meeting_Length = meeting_length, appts = students)
 
 # Log-out
 @app.route('/logout')
@@ -99,29 +119,19 @@ def profile(username):
     """
         Shows the guest-user side of the creator's page using dynamic links
     """
+
+    # Check to see if user exists
+    if User.query.filter_by(username=username).first() == None:
+        return ' User does not exist in database '
+
+    # Search for the user's availability by checking the user's row in database
     conn = sqlite3.connect('app.db')
     c = conn.cursor()
-
-    select_query = """SELECT * from user"""
-    c.execute(select_query)
-    records = c.fetchall()
-    
-    # Determine if the user exists in database, assign the answer to "found"
-    found = False
-    for row in records:
-        if row[1] == username:
-            found = True
-    
-    if found == False:
-        return ' User does not exist! '
-
-    # Change search for the user's availability
     select_query = """SELECT * from availability"""
     c.execute(select_query)
     timing = c.fetchall()
     
     name = time_range = meeting_length = None
-    User.username = '<username>'
     for row in timing:
         if row[1] == username:
             name = row[1]
@@ -138,8 +148,6 @@ def profile(username):
         meeting_length = "Time Length not set up yet!"
     else:
         meeting_length += " minutes"
-    
-    c.close()
 
     return render_template('dynamic.html', name = username, availability = time_range, time = meeting_length)
 
@@ -149,7 +157,6 @@ def settings():
     """
         Settings page that allow user to change availability, email preferance, and delete account.
     """
-
     form = SettingsForm()
 
     if form.validate_on_submit():
@@ -179,8 +186,6 @@ def appointments(username, date):
         Guest Users can select a date on the calednar and sign up for a session with the creator
     """
     form = AppointmentForm()
-    User.date = '<date>'
-    User.username = '<username>'
 
     if form.validate_on_submit():
         appt = Appointments(creator = username, name = form.name.data, email = form.email.data, time = form.time.data)
@@ -189,9 +194,10 @@ def appointments(username, date):
 
         # Since the method in appointments.html is a POST we know to enter if statement when form is complete
         if request.method == 'POST':
-            return render_template('Confirmation.html', name = username, date = date, time = form.time.data)
+            return render_template('Confirmation.html', name = username, date = date)
 
     return render_template('appointments.html', name = username, date = date, form = form)
+
 @app.route("/emailConfirm")
 def emailConfirm():
     """
